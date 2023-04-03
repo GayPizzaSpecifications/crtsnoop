@@ -25,6 +25,7 @@ dependencies {
   implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
   implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.0")
   implementation("org.postgresql:postgresql:42.6.0")
+  implementation("com.google.guava:guava:31.1-jre")
 }
 
 tasks.withType<KotlinCompile> {

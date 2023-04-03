@@ -1,13 +1,11 @@
 package gay.pizza.crtsnoop
 
+import com.google.common.cache.CacheBuilder
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import java.sql.Connection
-import java.sql.DriverManager
-import java.sql.PreparedStatement
-import java.sql.ResultSet
+import java.sql.*
 
-fun createRunningQueriesStatement(db: Connection): PreparedStatement {
+fun createRunningQueriesStatement(db: Connection): Pair<Statement, String> {
   val query = """
     SELECT
         query_start AS query_start,
@@ -18,7 +16,8 @@ fun createRunningQueriesStatement(db: Connection): PreparedStatement {
     WHERE query != '<IDLE>' AND query != '<insufficient privilege>' AND query NOT ILIKE '%pg_stat_activity%'
     ORDER BY query_start DESC
   """.trimIndent()
-  return db.prepareStatement(query)
+  val statement = db.createStatement()
+  return statement to query
 }
 
 @Serializable
@@ -42,13 +41,27 @@ fun RunningQuery.Companion.extractAll(resultSet: ResultSet): List<RunningQuery> 
 
 fun main() {
   val db = DriverManager.getConnection("jdbc:postgresql://crt.sh/certwatch", "guest", "")
-  val statement = createRunningQueriesStatement(db)
+  val cache = CacheBuilder.newBuilder()
+    .maximumSize(1000)
+    .build<String, String>()
 
   while (true) {
-    val queries = RunningQuery.extractAll(statement.executeQuery())
-    for (query in queries) {
-      println(Json.encodeToString(RunningQuery.serializer(), query))
+    try {
+      val (statement, query) = createRunningQueriesStatement(db)
+      statement.use { stmt ->
+        val queries = RunningQuery.extractAll(stmt.executeQuery(query))
+        for (item in queries) {
+          val identity = Json.encodeToString(RunningQuery.serializer(), item)
+          if (cache.getIfPresent(identity) == null) {
+            println(identity)
+          }
+          cache.put(identity, identity)
+        }
+      }
+    } catch (e: Exception) {
+      System.err.println("ERROR: $e")
+      e.printStackTrace()
     }
-    Thread.sleep(50)
+    Thread.sleep(5)
   }
 }
