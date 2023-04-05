@@ -62,6 +62,5 @@ fun main() {
       System.err.println("ERROR: $e")
       e.printStackTrace()
     }
-    Thread.sleep(5)
   }
 }
